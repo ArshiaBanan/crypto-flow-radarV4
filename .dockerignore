@@ -1,0 +1,13 @@
+.git
+.gitignore
+__pycache__
+*.pyc
+.pytest_cache
+data/*.db
+*.zip
+.env
+
+pump_dump_detector/*.db
+pump_dump_detector/scan_results.csv
+pump_dump_detector/*.session
+pump_dump_detector/*.session-journal

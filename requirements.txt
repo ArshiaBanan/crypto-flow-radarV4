@@ -1,0 +1,22 @@
+fastapi>=0.116,<1.0
+uvicorn[standard]>=0.35,<1.0
+httpx>=0.28,<1.0
+websockets>=15,<17
+pydantic>=2.11,<3.0
+pydantic-settings>=2.10,<3.0
+python-dotenv>=1.1,<2.0
+pytest>=8.4,<10.0
+pytest-asyncio>=1.1,<2.0
+numpy>=2.0,<3.0
+scikit-learn>=1.5,<2.0
+xgboost>=3.0,<4.0
+joblib>=1.4,<2.0
+psycopg[binary]>=3.2,<4.0
+redis>=6.4,<8.0
+
+# Dependencies used by the integrated multi-source Pump/Dump Detector
+ccxt>=4.3.0
+requests>=2.31.0
+praw>=7.7.0
+telethon>=1.36.0
+flask>=3.0.0

@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pump/Dump Detector</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #14161B;
+    --surface: #1B1E25;
+    --surface-raised: #22262F;
+    --border: #2A2E38;
+    --text: #E7E9EE;
+    --text-muted: #8B909C;
+    --accent: #C99A4C;
+    --accent-dim: #8A6E3C;
+    --pump: #4FB286;
+    --pump-dim: #2E4A3D;
+    --dump: #E0665A;
+    --dump-dim: #4A2E2C;
+    --neutral: #6B7280;
+    --radius: 6px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+
+  a { color: var(--accent); }
+
+  /* ---------- layout shell ---------- */
+  .shell { max-width: 1400px; margin: 0 auto; padding: 20px 24px 60px; }
+
+  header.top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 20px;
+  }
+
+  header.top h1 {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    margin: 0;
+    color: var(--text);
+  }
+  header.top h1 span { color: var(--accent); }
+
+  .status-line {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  .live-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--pump);
+    margin-right: 6px;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  .live-dot.stale { background: var(--neutral); animation: none; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(79,178,134,0.5); }
+    50% { opacity: 0.6; box-shadow: 0 0 0 4px rgba(79,178,134,0); }
+  }
+
+  /* ---------- controls ---------- */
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    margin-bottom: 18px;
+  }
+
+  .control-group { display: flex; align-items: center; gap: 8px; }
+  .control-group label { color: var(--text-muted); font-size: 12px; white-space: nowrap; }
+
+  input[type="range"] { accent-color: var(--accent); width: 130px; }
+  input[type="text"], input[type="number"], select {
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-family: inherit;
+    font-size: 13px;
+  }
+  input[type="text"]:focus, input[type="number"]:focus, select:focus { outline: 1px solid var(--accent); }
+
+  .dir-toggle { display: flex; gap: 4px; }
+  .dir-toggle button {
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .dir-toggle button.active { color: var(--bg); border-color: transparent; }
+  .dir-toggle button[data-dir="all"].active { background: var(--accent); }
+  .dir-toggle button[data-dir="PUMP WATCH"].active { background: var(--pump); }
+  .dir-toggle button[data-dir="DUMP WATCH"].active { background: var(--dump); }
+
+  /* ---------- table ---------- */
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+  table { width: 100%; border-collapse: collapse; min-width: 900px; }
+
+  thead th {
+    text-align: left;
+    padding: 10px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-muted);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  thead th:hover { color: var(--text); }
+  thead th.sorted::after { content: " " attr(data-arrow); color: var(--accent); }
+
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  tbody tr:hover { background: var(--surface); }
+  tbody tr:last-child { border-bottom: none; }
+  tbody td { padding: 10px 12px; white-space: nowrap; }
+
+  .symbol-cell { font-weight: 700; }
+
+  .score-bar-wrap { display: flex; align-items: center; gap: 8px; }
+  .score-bar { width: 46px; height: 5px; border-radius: 3px; background: var(--surface-raised); overflow: hidden; }
+  .score-bar-fill { height: 100%; }
+
+  .badge {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .badge.pump { background: var(--pump-dim); color: var(--pump); }
+  .badge.dump { background: var(--dump-dim); color: var(--dump); }
+  .badge.neutral { background: var(--surface-raised); color: var(--neutral); }
+
+  .tier { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+  .tier.CONFIRMED { background: var(--pump-dim); color: var(--pump); }
+  .tier.WATCH { background: rgba(201,154,76,0.15); color: var(--accent); }
+  .tier.LOW_CONFIDENCE { background: var(--surface-raised); color: var(--text-muted); }
+  .wash-icon { color: var(--dump); cursor: help; margin-left: 4px; }
+
+  .market-banner {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 16px; border-radius: var(--radius); margin-bottom: 14px;
+    font-size: 13px; border: 1px solid var(--border);
+  }
+  .market-banner.DUMP_CASCADE_RISK { background: var(--dump-dim); border-color: var(--dump); color: var(--dump); }
+  .market-banner.PUMP_SQUEEZE_RISK { background: var(--pump-dim); border-color: var(--pump); color: var(--pump); }
+  .market-banner.NEUTRAL { display: none; }
+
+  .pos { color: var(--pump); }
+  .neg { color: var(--dump); }
+  .muted { color: var(--text-muted); }
+
+  .sources-cell { max-width: 260px; overflow: hidden; text-overflow: ellipsis; color: var(--text-muted); font-size: 12px; }
+
+  .empty-state { padding: 40px 20px; text-align: center; color: var(--text-muted); }
+
+  /* ---------- detail panel ---------- */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+    display: none; align-items: stretch; justify-content: flex-end; z-index: 50;
+  }
+  .overlay.open { display: flex; }
+  .panel {
+    width: min(420px, 92vw);
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    padding: 22px;
+    overflow-y: auto;
+    animation: slideIn 0.18s ease-out;
+  }
+  @keyframes slideIn { from { transform: translateX(24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+  .panel-close {
+    background: none; border: none; color: var(--text-muted);
+    font-size: 20px; cursor: pointer; float: right; line-height: 1;
+  }
+  .panel h2 { margin: 0 0 4px; font-size: 22px; }
+  .panel .panel-price { color: var(--text-muted); font-size: 13px; margin-bottom: 18px; }
+  .panel-section { margin-bottom: 20px; }
+  .panel-section h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin: 0 0 8px; }
+  .panel-section p { margin: 0; font-size: 13px; }
+  canvas#historyChart { max-height: 180px; }
+
+  /* ---------- backtest ---------- */
+  details.backtest {
+    margin-top: 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+  }
+  details.backtest summary {
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 14px;
+    list-style: none;
+  }
+  details.backtest summary::-webkit-details-marker { display: none; }
+  details.backtest summary::before { content: "▸ "; color: var(--accent); }
+  details.backtest[open] summary::before { content: "▾ "; }
+
+  .bt-form { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; margin: 16px 0; }
+  .bt-form .control-group { flex-direction: column; align-items: flex-start; }
+  .bt-form button {
+    background: var(--accent); color: #1a1408; border: none;
+    padding: 8px 16px; border-radius: 4px; font-weight: 700; cursor: pointer;
+  }
+
+  .bt-cards { display: flex; gap: 16px; flex-wrap: wrap; }
+  .bt-card {
+    background: var(--surface-raised); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px 18px; min-width: 200px; flex: 1;
+  }
+  .bt-card h4 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .bt-card.pump h4 { color: var(--pump); }
+  .bt-card.dump h4 { color: var(--dump); }
+  .bt-stat { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; }
+
+  footer { margin-top: 30px; color: var(--text-muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <header class="top">
+    <h1>Pump<span>/</span>Dump <span>Detector</span></h1>
+    <div class="status-line">
+      <span><span class="live-dot" id="liveDot"></span><span id="lastScan">connecting…</span></span>
+      <span id="scanCount"></span>
+    </div>
+  </header>
+
+  <div class="market-banner NEUTRAL" id="marketBanner"></div>
+
+  <div class="controls">
+    <div class="control-group">
+      <label for="minScore">min score <span id="minScoreVal" class="mono">0.00</span></label>
+      <input type="range" id="minScore" min="0" max="1" step="0.05" value="0">
+    </div>
+    <div class="control-group dir-toggle" id="dirToggle">
+      <button data-dir="all" class="active">ALL</button>
+      <button data-dir="PUMP WATCH">PUMP</button>
+      <button data-dir="DUMP WATCH">DUMP</button>
+    </div>
+    <div class="control-group">
+      <input type="text" id="search" placeholder="filter symbol…">
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th data-key="symbol">SYMBOL</th>
+          <th data-key="price">PRICE</th>
+          <th data-key="score" class="sorted" data-arrow="▾">SCORE</th>
+          <th data-key="direction">DIRECTION</th>
+          <th data-key="confluence">CONFLUENCE</th>
+          <th data-key="volume_z">VOL_Z</th>
+          <th data-key="rush_order_z">RUSH_Z</th>
+          <th data-key="ob_imbalance">OB_IMB</th>
+          <th data-key="oi_change_pct">OI%</th>
+          <th data-key="funding_rate">FUNDING</th>
+          <th data-key="whale_net_flow_usd">WHALE $</th>
+          <th>SOURCES</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+    <div class="empty-state" id="emptyState" style="display:none;">
+      No scans recorded yet — start <code class="mono">python main.py --loop</code> in another terminal.
+    </div>
+  </div>
+
+  <details class="backtest">
+    <summary>Backtest — was the score actually right?</summary>
+    <div class="bt-form">
+      <div class="control-group">
+        <label>min score</label>
+        <input type="number" id="btMinScore" min="0" max="1" step="0.05" value="0.7">
+      </div>
+      <div class="control-group">
+        <label>forward hours</label>
+        <input type="number" id="btHours" min="1" step="1" value="24">
+      </div>
+      <div class="control-group">
+        <label>direction</label>
+        <select id="btDirection">
+          <option value="">both</option>
+          <option value="PUMP WATCH">PUMP WATCH</option>
+          <option value="DUMP WATCH">DUMP WATCH</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>confluence</label>
+        <select id="btConfluence">
+          <option value="">all tiers</option>
+          <option value="CONFIRMED">CONFIRMED only</option>
+          <option value="WATCH">WATCH only</option>
+          <option value="LOW_CONFIDENCE">LOW_CONFIDENCE only</option>
+        </select>
+      </div>
+      <button id="btRun">Run backtest</button>
+    </div>
+    <div id="btResults"></div>
+  </details>
+
+  <footer>Reads directly from the local SQLite database main.py writes to. No exchange calls happen here.</footer>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="panel">
+    <button class="panel-close" id="panelClose">×</button>
+    <h2 id="panelSymbol"></h2>
+    <div class="panel-price" id="panelPrice"></div>
+    <div class="panel-section">
+      <h3>Score history</h3>
+      <canvas id="historyChart"></canvas>
+    </div>
+    <div class="panel-section">
+      <h3>External / on-chain</h3>
+      <p id="panelExternal" class="muted">—</p>
+    </div>
+    <div class="panel-section">
+      <h3>Social</h3>
+      <p id="panelSocial" class="muted">—</p>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentRows = [];
+let sortKey = "score";
+let sortDir = -1;
+let filterDir = "all";
+let minScore = 0;
+let historyChart = null;
+
+function fmt(v, digits = 2, suffix = "") {
+  if (v === null || v === undefined) return '<span class="muted">—</span>';
+  const cls = v > 0 ? "pos" : (v < 0 ? "neg" : "");
+  const sign = v > 0 ? "+" : "";
+  return `<span class="${cls} mono">${sign}${Number(v).toFixed(digits)}${suffix}</span>`;
+}
+
+function fmtUsd(v) {
+  if (v === null || v === undefined) return '<span class="muted">—</span>';
+  const cls = v > 0 ? "pos" : (v < 0 ? "neg" : "");
+  const sign = v > 0 ? "+" : "";
+  const abs = Math.abs(v);
+  const short = abs >= 1e6 ? (abs/1e6).toFixed(2)+"M" : abs >= 1e3 ? (abs/1e3).toFixed(0)+"K" : abs.toFixed(0);
+  return `<span class="${cls} mono">${sign}${short}</span>`;
+}
+
+function fmtPrice(v) {
+  if (v === null || v === undefined) return '<span class="muted">—</span>';
+  const digits = v < 1 ? 6 : v < 100 ? 4 : 2;
+  return `<span class="mono">$${Number(v).toFixed(digits)}</span>`;
+}
+
+function directionBadge(dir) {
+  const cls = dir === "PUMP WATCH" ? "pump" : dir === "DUMP WATCH" ? "dump" : "neutral";
+  return `<span class="badge ${cls}">${dir}</span>`;
+}
+
+function confluenceBadge(tier, washFlag, crossStatus) {
+  if (!tier) return '<span class="muted">—</span>';
+  const wash = washFlag ? `<span class="wash-icon" title="Wash-trading suspected: volume spiked with almost no price move">⚠</span>` : "";
+  const crossNote = crossStatus && crossStatus !== "SKIPPED" ? ` title="cross-exchange: ${crossStatus}"` : "";
+  return `<span class="tier ${tier}"${crossNote}>${tier}</span>${wash}`;
+}
+
+function scoreBar(score) {
+  const pct = Math.round(score * 100);
+  const color = score >= 0.7 ? "var(--pump)" : score >= 0.4 ? "var(--accent)" : "var(--neutral)";
+  return `<div class="score-bar-wrap"><span class="mono">${score.toFixed(2)}</span>
+    <div class="score-bar"><div class="score-bar-fill" style="width:${pct}%;background:${color}"></div></div></div>`;
+}
+
+function applyFiltersAndRender() {
+  const search = document.getElementById("search").value.trim().toUpperCase();
+  let rows = currentRows.filter(r => r.score >= minScore);
+  if (filterDir !== "all") rows = rows.filter(r => r.direction === filterDir);
+  if (search) rows = rows.filter(r => r.symbol.includes(search));
+
+  rows.sort((a, b) => {
+    let av = a[sortKey], bv = b[sortKey];
+    if (sortKey === "symbol" || sortKey === "direction" || sortKey === "confluence") {
+      av = av || ""; bv = bv || "";
+      return sortDir * av.localeCompare(bv);
+    }
+    av = (av === null || av === undefined) ? -Infinity : av;
+    bv = (bv === null || bv === undefined) ? -Infinity : bv;
+    return sortDir * (av - bv);
+  });
+
+  const tbody = document.getElementById("tableBody");
+  const empty = document.getElementById("emptyState");
+  if (rows.length === 0) {
+    tbody.innerHTML = "";
+    empty.style.display = "block";
+    return;
+  }
+  empty.style.display = "none";
+
+  tbody.innerHTML = rows.map(r => {
+    const sources = [r.external_text, r.social_text].filter(Boolean).join(" · ") || "—";
+    return `<tr data-symbol="${r.symbol}">
+      <td class="symbol-cell">${r.symbol}</td>
+      <td>${fmtPrice(r.price)}</td>
+      <td>${scoreBar(r.score)}</td>
+      <td>${directionBadge(r.direction)}</td>
+      <td>${confluenceBadge(r.confluence, r.wash_trading_flag, r.cross_exchange_status)}</td>
+      <td>${fmt(r.volume_z)}</td>
+      <td title="${r.rush_taker_ratio !== null && r.rush_taker_ratio !== undefined ? 'taker-buy ratio: ' + r.rush_taker_ratio : ''}">${fmt(r.rush_order_z)}</td>
+      <td>${fmt(r.ob_imbalance, 3)}</td>
+      <td>${fmt(r.oi_change_pct, 1, "%")}</td>
+      <td>${fmt(r.funding_rate, 4)}</td>
+      <td>${fmtUsd(r.whale_net_flow_usd)}</td>
+      <td class="sources-cell" title="${sources.replace(/"/g,'&quot;')}">${sources}</td>
+    </tr>`;
+  }).join("");
+
+  tbody.querySelectorAll("tr").forEach(tr => {
+    tr.addEventListener("click", () => openDetail(tr.dataset.symbol));
+  });
+}
+
+function relativeTime(unixTs) {
+  const diff = Math.max(0, Math.floor(Date.now() / 1000) - unixTs);
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  return `${Math.floor(diff / 3600)}h ${Math.floor((diff % 3600) / 60)}m ago`;
+}
+
+let lastScanTs = null;
+
+async function fetchLatest() {
+  try {
+    const res = await fetch("/api/latest");
+    const data = await res.json();
+    currentRows = data.rows || [];
+    document.getElementById("scanCount").textContent = data.scan_count ? `${data.scan_count} scans recorded` : "";
+    if (data.scan) {
+      lastScanTs = data.scan.unix_ts;
+      document.getElementById("liveDot").classList.remove("stale");
+    } else {
+      document.getElementById("lastScan").textContent = "no scans yet";
+      document.getElementById("liveDot").classList.add("stale");
+    }
+    renderMarketBanner(data.market_context);
+    applyFiltersAndRender();
+  } catch (e) {
+    document.getElementById("liveDot").classList.add("stale");
+    document.getElementById("lastScan").textContent = "connection lost";
+  }
+}
+
+function renderMarketBanner(ctx) {
+  const el = document.getElementById("marketBanner");
+  const bias = (ctx && ctx.bias) || "NEUTRAL";
+  el.className = "market-banner " + bias;
+  if (bias === "DUMP_CASCADE_RISK") {
+    el.innerHTML = `⚠ <strong>Market-wide leverage bias: DUMP CASCADE RISK</strong> — ${ctx.funding_long_share_pct}% of perpetuals show crowded-long funding right now. A drop could trigger forced-selling liquidations across many alts at once.`;
+  } else if (bias === "PUMP_SQUEEZE_RISK") {
+    el.innerHTML = `⚠ <strong>Market-wide leverage bias: PUMP SQUEEZE RISK</strong> — ${ctx.funding_short_share_pct}% of perpetuals show crowded-short funding right now. A rally could trigger a short-squeeze cascade across many alts.`;
+  }
+}
+
+function tickClock() {
+  if (lastScanTs !== null) {
+    document.getElementById("lastScan").textContent = "last scan: " + relativeTime(lastScanTs);
+    const stale = (Math.floor(Date.now() / 1000) - lastScanTs) > 1800; // >30min = probably not looping
+    document.getElementById("liveDot").classList.toggle("stale", stale);
+  }
+}
+
+async function openDetail(symbol) {
+  const row = currentRows.find(r => r.symbol === symbol);
+  document.getElementById("panelSymbol").textContent = symbol;
+  document.getElementById("panelPrice").innerHTML = row
+    ? `${fmtPrice(row.price)} · ${directionBadge(row.direction)} · ${confluenceBadge(row.confluence, row.wash_trading_flag, row.cross_exchange_status)}`
+    : "";
+  document.getElementById("panelExternal").textContent = (row && row.external_text) || "no cross-source hit this scan";
+  document.getElementById("panelSocial").textContent = (row && row.social_text) || "no social signal this scan";
+  document.getElementById("overlay").classList.add("open");
+
+  const res = await fetch(`/api/history/${symbol}?limit=60`);
+  const data = await res.json();
+  const labels = data.points.map(p => new Date(p.unix_ts * 1000).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}));
+  const scores = data.points.map(p => p.score);
+
+  if (historyChart) historyChart.destroy();
+  const ctx = document.getElementById("historyChart").getContext("2d");
+  historyChart = new Chart(ctx, {
+    type: "line",
+    data: { labels, datasets: [{
+      data: scores, borderColor: "#C99A4C", backgroundColor: "rgba(201,154,76,0.12)",
+      fill: true, tension: 0.25, pointRadius: 0, borderWidth: 2,
+    }]},
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: "#8B909C", maxTicksLimit: 6, font: { size: 10 } }, grid: { color: "#2A2E38" } },
+        y: { min: 0, max: 1, ticks: { color: "#8B909C", font: { size: 10 } }, grid: { color: "#2A2E38" } },
+      },
+    },
+  });
+}
+
+document.getElementById("panelClose").addEventListener("click", () => {
+  document.getElementById("overlay").classList.remove("open");
+});
+document.getElementById("overlay").addEventListener("click", (e) => {
+  if (e.target.id === "overlay") document.getElementById("overlay").classList.remove("open");
+});
+
+document.getElementById("minScore").addEventListener("input", (e) => {
+  minScore = parseFloat(e.target.value);
+  document.getElementById("minScoreVal").textContent = minScore.toFixed(2);
+  applyFiltersAndRender();
+});
+document.getElementById("search").addEventListener("input", applyFiltersAndRender);
+
+document.getElementById("dirToggle").addEventListener("click", (e) => {
+  if (e.target.tagName !== "BUTTON") return;
+  filterDir = e.target.dataset.dir;
+  document.querySelectorAll("#dirToggle button").forEach(b => b.classList.toggle("active", b === e.target));
+  applyFiltersAndRender();
+});
+
+document.querySelectorAll("thead th[data-key]").forEach(th => {
+  th.addEventListener("click", () => {
+    const key = th.dataset.key;
+    if (sortKey === key) { sortDir *= -1; } else { sortKey = key; sortDir = -1; }
+    document.querySelectorAll("thead th").forEach(h => h.classList.remove("sorted"));
+    th.classList.add("sorted");
+    th.dataset.arrow = sortDir === -1 ? "▾" : "▴";
+    applyFiltersAndRender();
+  });
+});
+
+document.getElementById("btRun").addEventListener("click", async () => {
+  const minScoreArg = document.getElementById("btMinScore").value;
+  const hours = document.getElementById("btHours").value;
+  const direction = document.getElementById("btDirection").value;
+  const confluence = document.getElementById("btConfluence").value;
+  const btResults = document.getElementById("btResults");
+  btResults.innerHTML = '<p class="muted">running…</p>';
+
+  const params = new URLSearchParams({ min_score: minScoreArg, hours });
+  if (direction) params.set("direction", direction);
+  if (confluence) params.set("confluence", confluence);
+  const res = await fetch(`/api/backtest?${params}`);
+  const data = await res.json();
+
+  if (data.total === 0) {
+    btResults.innerHTML = '<p class="muted">No completed signals yet at this threshold/window — either nothing scored this high, or not enough time has passed since it did.</p>';
+    return;
+  }
+
+  function card(label, stats, cls) {
+    if (!stats.count) return `<div class="bt-card ${cls}"><h4>${label}</h4><p class="muted">no signals</p></div>`;
+    return `<div class="bt-card ${cls}">
+      <h4>${label} · ${stats.count} signals</h4>
+      <div class="bt-stat"><span class="muted">avg return</span>${fmt(stats.avg_return, 2, "%")}</div>
+      <div class="bt-stat"><span class="muted">win rate</span><span class="mono">${stats.win_rate}%</span></div>
+      <div class="bt-stat"><span class="muted">best / worst</span>${fmt(stats.best,2,"%")} / ${fmt(stats.worst,2,"%")}</div>
+    </div>`;
+  }
+
+  btResults.innerHTML = `<div class="bt-cards">
+    ${card("PUMP WATCH", data.pump, "pump")}
+    ${card("DUMP WATCH", data.dump, "dump")}
+  </div>`;
+});
+
+fetchLatest();
+setInterval(fetchLatest, 15000);
+setInterval(tickClock, 5000);
+</script>
+</body>
+</html>

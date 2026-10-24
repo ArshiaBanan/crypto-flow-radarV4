@@ -1,0 +1,23 @@
+Crypto Flow Radar v3.9 — Online Live Terminal
+
+Highlights
+- Same-origin Frontend <-> Backend WebSocket at /ws/live
+- /api/live/quotes REST fallback
+- Immediate live quote cache from Binance futures aggTrade events
+- Existing 1m Feature -> Score -> Fusion -> Risk -> Alert pipeline preserved
+- TradingView embedded chart/reference layer
+- Railway-ready Dockerfile using $PORT
+- railway.toml deployment config
+- Production env template: .env.online.example
+- No secrets or runtime DB/cache included
+
+Validation
+- 168/168 pytest tests passed
+- Python compileall passed
+- Frontend JavaScript syntax passed
+- websocket API test passed
+- railway.toml parsed successfully
+
+Runtime limitations verified in this build environment
+- External Binance network/DNS was unavailable in the sandbox, so live exchange ingestion was not falsely claimed as observed here.
+- Public hosting account/domain was not connected, so no public URL was falsely claimed.

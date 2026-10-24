@@ -1,0 +1,9 @@
+Crypto Flow Radar v4.0 integration release
+
+Base: v3.9 SaaS/WebSocket terminal + uploaded pump_dump_detector project
+Frontend: preserved from v3.9 with Radar volume display clarified to VOL Z
+Detector integration: app/detector_v40.py; upstream project in pump_dump_detector/
+New routes: /v40/detector/status, /v40/detector/results, /v40/detector/run
+Scanner snapshot: prefers uploaded detector results after a completed scan; otherwise native engine fallback
+Safety: upstream detector runs isolated subprocess; provider credentials are environment-only; disabled by default
+Validation: 170 pytest checks passing; compileall passed. Live exchange/provider calls, Railway deployment, Docker build, PostgreSQL/Redis live integration, and real-world signal profitability have NOT been verified in this build environment.

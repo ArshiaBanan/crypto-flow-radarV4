@@ -1,0 +1,23 @@
+Crypto Flow Radar v3.8
+
+Release scope:
+- v3.7 multi-asset market federation preserved
+- US30 / Dow Jones
+- SPX500 / S&P 500
+- US100 / NASDAQ-100 (FXCM native NAS100)
+- USOIL / WTI
+- UKOIL / Brent
+- DXY
+- BTC.D
+- USDT.D
+- OANDA configurable extended instruments
+- FXCM verified symbol mappings
+- Trading Economics optional DXY feed
+- CoinMarketCap BTC dominance + derived USDT dominance
+- Updated Global Markets UI and TradingView chart mappings
+
+Validation:
+- 165 tests passed
+- Python compileall passed
+- Frontend JS syntax check required at release
+- No runtime databases/caches included
